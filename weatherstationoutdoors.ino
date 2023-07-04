@@ -31,7 +31,7 @@ float old1p0, old2p5, old10, new1p0, new2p5, new10;
 //char auth[] = "8157361d2bf349e88d49b58c605aef00"; //BLYNKold
 char auth[] = "X_pnRUFOab29d3aNrScsKq1dryQYdTw7"; //BLYNK
 
-float abshumBME, tempBME, presBME, humBME;
+float abshumBME, tempBME, presBME, humBME, ds18temp;
 
 int timer1 = TTU; // How often to send sensor updates to Ubidots
 int screentime = (TTS / 1000);
@@ -61,6 +61,7 @@ int newpage = 1;
 int ranged = 0;
 float dewpoint = 0;
 float presold, presnew, tempold, tempnew, humold, humnew, humtemp = 0;
+float humidex = 0;
 float deltapres, deltatemp, deltahum = 0;
 float fwind, windsum, windavg = 0;
 int windcount = 0;
@@ -106,17 +107,15 @@ void setup() { //This is where all Arduinos store the on-bootup code
 void loop() { //This is where all Arduinos store their "do this all the time" code
   pms7003.Read();
   Blynk.run();
-  if (millis() - millisBlynk >= 2000)
+  if (millis() - millisBlynk >= 30000)
   {
-    pagetimer -= 2;
-    timerBlynk -= 2;
-      if (timerBlynk <= 0)
-      {
+    millisBlynk = millis();
         timerBlynk = TTU;
         bme.performReading();
         sensors.requestTemperatures();
         tempBME = bme.temperature;
         humBME = bme.humidity;
+        ds18temp = sensors.getTempCByIndex(0);
         new1p0 = pms7003.GetData(pms7003.pm1_0);
         new2p5 = pms7003.GetData(pms7003.pm2_5);
         new10 = pms7003.GetData(pms7003.pm10);
@@ -133,10 +132,11 @@ void loop() { //This is where all Arduinos store their "do this all the time" co
 
         abshumBME = (6.112 * pow(2.71828, ((17.67 * tempBME)/(tempBME+243.5))) * humBME * 2.1674)/(273.15 + tempBME);
         dewpoint = tempBME - ((100 - humBME)/5);
+        humidex = ds18temp + 0.5555 * (6.11 * pow(2.71828, 5417.7530*( (1/273.16) - (1/(273.15 + dewpoint)) ) ) - 10);
+        Blynk.virtualWrite(V0, ds18temp);
         Blynk.virtualWrite(V1, (bme.pressure / 100.0));
-        Blynk.virtualWrite(V0, sensors.getTempCByIndex(0));
-        Blynk.virtualWrite(V3, bme.humidity);
         Blynk.virtualWrite(V2, dewpoint);
+        Blynk.virtualWrite(V3, bme.humidity);
         Blynk.virtualWrite(V4, abshumBME);
         Blynk.virtualWrite(V5, sensors.getTempCByIndex(1));
         Blynk.virtualWrite(V6, bme.temperature);
@@ -150,11 +150,12 @@ void loop() { //This is where all Arduinos store their "do this all the time" co
 		Blynk.virtualWrite(V14, pms7003.GetData(pms7003.count2_5um));
 		Blynk.virtualWrite(V15, pms7003.GetData(pms7003.count5um));
 		Blynk.virtualWrite(V16, pms7003.GetData(pms7003.count10um));
+		Blynk.virtualWrite(V17, humidex);
 		old1p0 = new1p0;
 		old2p5 = new2p5;
         old10 = new10;
         firstvalue = 0;
-      }
+      
   }
 }
 
