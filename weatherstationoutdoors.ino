@@ -17,26 +17,28 @@
 #include "math.h"
 
 OneWire oneWire(D2);
-DallasTemperature sensors(&oneWire);
-Adafruit_BME680 bme; // I2C
+DallasTemperature sensors(&oneWire);  //start up the DS18 temp probes
+Adafruit_BME680 bme; // start up the BME680 weather probe via I2C
 
 
 #define SEALEVELPRESSURE_HPA (1013.25)
 #define tempoffset -0.9F
 #define TTS 1000 //Time till screen update in ms
 #define TTU 20 //Time till update in TTS intervals
+
+//TODO: MANY OF THESE DECLARATIONS ARE OLD AND UNUSED.  
 int timerBlynk = TTU;
 float old1p0, old2p5, old10, new1p0, new2p5, new10;
 
-//char auth[] = "8157361d2bf349e88d49b58c605aef00"; //BLYNKold
-char auth[] = "X_pnRUFOab29d3aNrScsKq1dryQYdTw7"; //BLYNK
+
+char auth[] = "X_pnRUFOab29d3aNrScsKq1dryQYdTw7"; //auth token for Blynk - this is a LOCAL token, can't be used without LAN access
 
 float abshumBME, tempBME, presBME, humBME, ds18temp;
 
 int timer1 = TTU; // How often to send sensor updates to Ubidots
 int screentime = (TTS / 1000);
 int debugcounter = 105;
-int firstvalue = 1;
+int firstvalue = 1;  //important, do not delete
 
 int history = 2;
 int historycount = history;
@@ -86,7 +88,7 @@ char deltatime[64];
 
 int timerPhant = 3;
 
-PMS7003Serial<USARTSerial> pms7003(Serial1, D6);
+PMS7003Serial<USARTSerial> pms7003(Serial1, D6);  //start up the PMS laser particle counter
 
 void setup() { //This is where all Arduinos store the on-bootup code
   //RGB.control(true); //Turn off Photon's pulsing blue LED
@@ -107,7 +109,7 @@ void setup() { //This is where all Arduinos store the on-bootup code
 void loop() { //This is where all Arduinos store their "do this all the time" code
   pms7003.Read();
   Blynk.run();
-  if (millis() - millisBlynk >= 30000)
+  if (millis() - millisBlynk >= 30000) //every 30 seconds
   {
     millisBlynk = millis();
         timerBlynk = TTU;
@@ -119,20 +121,22 @@ void loop() { //This is where all Arduinos store their "do this all the time" co
         new1p0 = pms7003.GetData(pms7003.pm1_0);
         new2p5 = pms7003.GetData(pms7003.pm2_5);
         new10 = pms7003.GetData(pms7003.pm10);
-        if (firstvalue == 0)
+        
+        if (firstvalue == 0)  //do not do this on the first run
         {
-            if (new1p0 > 200) {new1p0 = old1p0;}
-            if (new2p5 > 200) {new2p5 = old2p5;}
+            if (new1p0 > 200) {new1p0 = old1p0;} //check for data spikes in particle counter, ignore data that is >200
+            if (new2p5 > 200) {new2p5 = old2p5;} //data spikes ruin pretty graph
             if (new10 > 200) {new10 = old10;}
-            if (new1p0 - old1p0 > 50) {new1p0 = old1p0;}
+            if (new1p0 - old1p0 > 50) {new1p0 = old1p0;} //also ignore data that is >50 off from last data
             if (new2p5 - old2p5 > 50) {new2p5 = old2p5;}
             if (new10 - old10 > 50) {new10 = old10;}
         }
 
 
-        abshumBME = (6.112 * pow(2.71828, ((17.67 * tempBME)/(tempBME+243.5))) * humBME * 2.1674)/(273.15 + tempBME);
-        dewpoint = tempBME - ((100 - humBME)/5);
-        humidex = ds18temp + 0.5555 * (6.11 * pow(2.71828, 5417.7530*( (1/273.16) - (1/(273.15 + dewpoint)) ) ) - 10);
+        abshumBME = (6.112 * pow(2.71828, ((17.67 * tempBME)/(tempBME+243.5))) * humBME * 2.1674)/(273.15 + tempBME); //calculate absolute humidity
+        dewpoint = tempBME - ((100 - humBME)/5); //calculate dewpoint
+        humidex = ds18temp + 0.5555 * (6.11 * pow(2.71828, 5417.7530*( (1/273.16) - (1/(273.15 + dewpoint)) ) ) - 10); //calculate humidex using Environment Canada formula
+        
         Blynk.virtualWrite(V0, ds18temp);
         Blynk.virtualWrite(V1, (bme.pressure / 100.0));
         Blynk.virtualWrite(V2, dewpoint);
@@ -151,10 +155,11 @@ void loop() { //This is where all Arduinos store their "do this all the time" co
 		Blynk.virtualWrite(V15, pms7003.GetData(pms7003.count5um));
 		Blynk.virtualWrite(V16, pms7003.GetData(pms7003.count10um));
 		Blynk.virtualWrite(V17, humidex);
-		old1p0 = new1p0;
+		
+		old1p0 = new1p0; //reset data spike check variable
 		old2p5 = new2p5;
         old10 = new10;
-        firstvalue = 0;
+        firstvalue = 0; //we have run once now, no longer first run
       
   }
 }
