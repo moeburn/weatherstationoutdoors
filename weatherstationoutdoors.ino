@@ -96,7 +96,7 @@ int last_pushed = 0; // global variable
 int page = 1;
 int newpage = 1;
 int ranged = 0;
-
+float dewpoint = 0;
 float presold, presnew, tempold, tempnew, humold, humnew, humtemp = 0;
 float deltapres, deltatemp, deltahum = 0;
 float fwind, windsum, windavg = 0;
@@ -231,10 +231,26 @@ void loop() { //This is where all Arduinos store their "do this all the time" co
         Blynk.virtualWrite(V0, sensors.getTempCByIndex(0));
         Blynk.virtualWrite(V3, bme.humidity);
         abshumBME = (6.112 * pow(2.71828, ((17.67 * tempBME)/(tempBME+243.5))) * humBME * 2.1674)/(273.15 + tempBME);
+        dewpoint = tempBME - ((100 - humBME)/5);
+        Blynk.virtualWrite(V2, dewpoint);
         Blynk.virtualWrite(V4, abshumBME);
         Blynk.virtualWrite(V5, sensors.getTempCByIndex(1));
         Blynk.virtualWrite(V6, bme.temperature);
         Blynk.virtualWrite(V7, (bme.gas_resistance / 1000.0));
+
+                Blynk.virtualWrite(V8, new1p0);
+				Blynk.virtualWrite(V9, new2p5);
+				Blynk.virtualWrite(V10, new10);
+				Blynk.virtualWrite(V11, pms7003.GetData(pms7003.count0_3um));
+				Blynk.virtualWrite(V12, pms7003.GetData(pms7003.count0_5um));
+				Blynk.virtualWrite(V13, pms7003.GetData(pms7003.count1um));
+				Blynk.virtualWrite(V14, pms7003.GetData(pms7003.count2_5um));
+				Blynk.virtualWrite(V15, pms7003.GetData(pms7003.count5um));
+				Blynk.virtualWrite(V16, pms7003.GetData(pms7003.count10um));
+		old1p0 = new1p0;
+		old2p5 = new2p5;
+        old10 = new10;
+        firstvalue = 0;
         //postToPhant();
         /*if (timerPhant <= 0)
         {
