@@ -33,7 +33,7 @@ float old1p0, old2p5, old10, new1p0, new2p5, new10;
 
 char auth[] = "X_pnRUFOab29d3aNrScsKq1dryQYdTw7"; //auth token for Blynk - this is a LOCAL token, can't be used without LAN access
 
-float abshumBME, tempBME, presBME, humBME, ds18temp;
+float abshumBME, tempBME, presBME, humBME, ds18temp, gasBME;
 
 int timer1 = TTU; // How often to send sensor updates to Ubidots
 int screentime = (TTS / 1000);
@@ -117,6 +117,7 @@ void loop() { //This is where all Arduinos store their "do this all the time" co
         sensors.requestTemperatures();
         tempBME = bme.temperature;
         humBME = bme.humidity;
+        gasBME = (1 / (bme.gas_resistance / 1000.0)) * 10;
         ds18temp = sensors.getTempCByIndex(0);
         new1p0 = pms7003.GetData(pms7003.pm1_0);
         new2p5 = pms7003.GetData(pms7003.pm2_5);
@@ -133,7 +134,7 @@ void loop() { //This is where all Arduinos store their "do this all the time" co
         }
 
 
-        abshumBME = (6.112 * pow(2.71828, ((17.67 * tempBME)/(tempBME+243.5))) * humBME * 2.1674)/(273.15 + tempBME); //calculate absolute humidity
+        abshumBME = (6.112 * pow(2.71828, ((17.67 * tempBME)/(tempBME + 243.5))) * humBME * 2.1674)/(273.15 + tempBME); //calculate absolute humidity
         dewpoint = tempBME - ((100 - humBME)/5); //calculate dewpoint
         humidex = ds18temp + 0.5555 * (6.11 * pow(2.71828, 5417.7530*( (1/273.16) - (1/(273.15 + dewpoint)) ) ) - 10); //calculate humidex using Environment Canada formula
         
@@ -144,7 +145,7 @@ void loop() { //This is where all Arduinos store their "do this all the time" co
         Blynk.virtualWrite(V4, abshumBME);
         Blynk.virtualWrite(V5, sensors.getTempCByIndex(1));
         Blynk.virtualWrite(V6, bme.temperature);
-        Blynk.virtualWrite(V7, (bme.gas_resistance / 1000.0));
+        Blynk.virtualWrite(V7, gasBME);
         Blynk.virtualWrite(V8, new1p0);
 		Blynk.virtualWrite(V9, new2p5);
 		Blynk.virtualWrite(V10, new10);
