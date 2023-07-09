@@ -88,7 +88,8 @@ char deltatime[64];
 
 int timerPhant = 3;
 
-int menuValue, zebraR, zebraG, zebraB, sliderValue;
+int zebraR, zebraG, zebraB, sliderValue;
+int menuValue = 2;
 float  pmR, pmG, pmB;
 bool rgbON = true;
 
@@ -127,6 +128,11 @@ void setup() { //This is where all Arduinos store the on-bootup code
     terminal.println("********************************");
     terminal.println("STARTING OUTDOOR WEATHER STATION");
     terminal.println(Time.timeStr()); //print current time to Blynk terminal
+    terminal.print("Default LED brightness: ");
+    terminal.println(RGB.brightness());
+    RGB.brightness(255);
+    terminal.print("Adjusted LED brightness: ");
+    terminal.println(RGB.brightness());
     terminal.println("********************************");
     terminal.flush();
     Time.zone(-5);
