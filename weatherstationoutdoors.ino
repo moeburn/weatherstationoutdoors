@@ -1,3 +1,5 @@
+// THIS INO IS OLD AND IS ONLY KEPT FOR HISTORICAL PURPOSES 
+
 // This #include statement was automatically added by the Particle IDE.
 #include <PMS7003-Particle-Sensor-Serial.h>
 
