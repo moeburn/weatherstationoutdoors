@@ -2,7 +2,7 @@
 #include <PMS7003-Particle-Sensor-Serial.h>
 
 // This #include statement was automatically added by the Particle IDE.
-#include <Adafruit_BME680.h>
+//#include <Adafruit_BME680.h>
 
 // This #include statement was automatically added by the Particle IDE.
 #include <spark-dallas-temperature.h>
@@ -13,7 +13,7 @@
 // This #include statement was automatically added by the Particle IDE.
 #include <blynk.h>
 
-#include <bsec.h>
+#include <bsec2.h>
 
 
 
@@ -24,14 +24,42 @@ const uint8_t bsec_config_iaq[] = {2,9,4,1,61,0,0,0,0,0,0,0,182,1,0,0,52,0,1,0,0
 
 OneWire oneWire(D2);
 DallasTemperature sensors(&oneWire);  //start up the DS18 temp probes
-Adafruit_BME680 bme; // start up the BME680 weather probe via I2C
+//Adafruit_BME680 bme; // start up the BME680 weather probe via I2C
 
 #define STATE_SAVE_PERIOD	UINT32_C(360 * 60 * 1000)
 
-#define SEALEVELPRESSURE_HPA (1013.25)
-#define tempoffset -0.9F
-#define TTS 1000 //Time till screen update in ms
-#define TTU 20 //Time till update in TTS intervals
+
+/**
+ * @brief : This function checks the BSEC status, prints the respective error code. Halts in case of error
+ * @param[in] bsec  : Bsec2 class object
+ */
+void checkBsecStatus(Bsec2 bsec);
+
+/**
+ * @brief : This function updates/saves BSEC state
+ * @param[in] bsec  : Bsec2 class object
+ */
+void updateBsecState(Bsec2 bsec);
+
+/**
+ * @brief : This function is called by the BSEC library when a new output is available
+ * @param[in] input     : BME68X sensor data before processing
+ * @param[in] outputs   : Processed BSEC BSEC output data
+ * @param[in] bsec      : Instance of BSEC2 calling the callback
+ */
+void newDataCallback(const bme68xData data, const bsecOutputs outputs, Bsec2 bsec);
+
+/**
+ * @brief : This function retrieves the existing state
+ * @param : Bsec2 class object
+ */
+bool loadState(Bsec2 bsec);
+
+/**
+ * @brief : This function writes the state into EEPROM
+ * @param : Bsec2 class object
+ */
+bool saveState(Bsec2 bsec);
 
 //TODO: MANY OF THESE DECLARATIONS ARE OLD AND UNUSED.  
 
@@ -39,12 +67,12 @@ void checkIaqSensorStatus(void);
 void errLeds(void);
 void updateState(void);
 void loadState(void);
-Bsec iaqSensor;
-uint8_t bsecState[BSEC_MAX_STATE_BLOB_SIZE] = {0};
+Bsec2 iaqSensor;
+static uint8_t bsecState[BSEC_MAX_STATE_BLOB_SIZE];
 uint16_t stateUpdateCounter = 0;
 String output;
 
-int timerBlynk = TTU;
+
 float old1p0, old2p5, old10, new1p0, new2p5, new10;
 
 
@@ -52,8 +80,7 @@ char auth[] = "X_pnRUFOab29d3aNrScsKq1dryQYdTw7"; //auth token for Blynk - this 
 
 float abshumBME, tempBME, presBME, humBME, ds18temp, gasBME;
 
-int timer1 = TTU; // How often to send sensor updates to Ubidots
-int screentime = (TTS / 1000);
+
 int debugcounter = 105;
 int firstvalue = 1;  //important, do not delete
 
@@ -133,6 +160,8 @@ BLYNK_WRITE(V19)
 void setup() { //This is where all Arduinos store the on-bootup code
   //RGB.control(true); //Turn off Photon's pulsing blue LED
     Serial.begin();
+    Time.zone(-4);
+    Wire.begin();
     iaqSensor.begin(BME68X_I2C_ADDR_HIGH, Wire);
     /*bme.begin();
     bme.setTemperatureOversampling(BME680_OS_8X);
@@ -147,19 +176,9 @@ void setup() { //This is where all Arduinos store the on-bootup code
     terminal.println("********************************");
     terminal.println("STARTING OUTDOOR WEATHER STATION");
     terminal.println(output);
-    terminal.println(Time.timeStr()); //print current time to Blynk terminal
-    terminal.print("Default LED brightness: ");
-    terminal.println(RGB.brightness());
-    RGB.brightness(255);
-    terminal.print("Adjusted LED brightness: ");
-    terminal.println(RGB.brightness());
-    terminal.print("BSEC Config: ");
-    for(int i = 0; i < 462; i++)
-{
-  terminal.print(bsec_config_iaq[i]);
-}
+
 terminal.println("");
-        checkIaqSensorStatus();
+        
     bsec_virtual_sensor_t sensorList[13] = {
     BSEC_OUTPUT_IAQ,
     BSEC_OUTPUT_STATIC_IAQ,
@@ -176,47 +195,28 @@ terminal.println("");
     BSEC_OUTPUT_GAS_PERCENTAGE
   };
   iaqSensor.setTemperatureOffset(1.0);
-  checkIaqSensorStatus();
+
   iaqSensor.setConfig(bsec_config_iaq);
-  checkIaqSensorStatus();
+
    loadState();
   iaqSensor.updateSubscription(sensorList, 13, BSEC_SAMPLE_RATE_LP);
-  checkIaqSensorStatus();
-
+  iaqSensor.attachCallback(newDataCallback);
     // Print the header
-    output = "Timestamp [ms], IAQ, IAQ accuracy, Static IAQ, CO2 equivalent, breath VOC equivalent, raw temp[°C], pressure [hPa], raw relative humidity [%], gas [Ohm], Stab Status, run in status, comp temp[°C], comp humidity [%], gas percentage";
-    terminal.println(output);
     terminal.println("********************************");
     terminal.flush();
 
 
-    Time.zone(-5);
+    
     sensors.begin();
 }
 
-void loop() { //This is where all Arduinos store their "do this all the time" code
-  unsigned long time_trigger = millis();
+void loop() { //Do all the time
+
                     if (iaqSensor.run()) { // If new data is available
                 
-                output = String(time_trigger);
-                output += ", " + String(iaqSensor.iaq);
-                output += ", " + String(iaqSensor.iaqAccuracy);
-                output += ", " + String(iaqSensor.staticIaq);
-                output += ", " + String(iaqSensor.co2Equivalent);
-                output += ", " + String(iaqSensor.breathVocEquivalent);
-                output += ", " + String(iaqSensor.rawTemperature);
-                output += ", " + String(iaqSensor.pressure);
-                output += ", " + String(iaqSensor.rawHumidity);
-                output += ", " + String(iaqSensor.gasResistance);
-                output += ", " + String(iaqSensor.stabStatus);
-                output += ", " + String(iaqSensor.runInStatus);
-                output += ", " + String(iaqSensor.temperature);
-                output += ", " + String(iaqSensor.humidity);
-                output += ", " + String(iaqSensor.gasPercentage);
-                updateState();
                 
             } else {
-                checkIaqSensorStatus();
+             
             }
 
     pms7003.Read();
@@ -260,23 +260,13 @@ void loop() { //This is where all Arduinos store their "do this all the time" co
         RGB.color(zebraR, zebraG, zebraB);
         }
     
-    if ((millis() - millisBlynk >= 30000) || (firstvalue == 1)) //every 30 seconds OR on first boot
+    if (millis() - millisBlynk >= 30000) //every 30 seconds OR on first boot
     {
 
         millisBlynk = millis();
         //bme.performReading();
         sensors.requestTemperatures();
-        tempBME = iaqSensor.temperature;
-        humBME = iaqSensor.humidity;
-        gasBME = (1 / (iaqSensor.gasResistance / 1000.0)) * 10;
-        bmeiaq = iaqSensor.iaq;
-        bmeiaqAccuracy = iaqSensor.iaqAccuracy;
-        bmestaticIaq = iaqSensor.staticIaq;
-        bmeco2Equivalent = iaqSensor.co2Equivalent;
-        bmebreathVocEquivalent = iaqSensor.breathVocEquivalent;
-        bmestabStatus = iaqSensor.stabStatus;
-        bmerunInStatus = iaqSensor.runInStatus;
-        bmegasPercentage = iaqSensor.gasPercentage;
+
 
         ds18temp = sensors.getTempCByIndex(0);
         new1p0 = pms7003.GetData(pms7003.pm1_0);
@@ -299,7 +289,7 @@ void loop() { //This is where all Arduinos store their "do this all the time" co
         humidex = ds18temp + 0.5555 * (6.11 * pow(2.71828, 5417.7530*( (1/273.16) - (1/(273.15 + dewpoint)) ) ) - 10); //calculate humidex using Environment Canada formula
         sliderValue = new2p5;
         Blynk.virtualWrite(V0, ds18temp);
-        Blynk.virtualWrite(V1, (iaqSensor.pressure / 100.0));
+        Blynk.virtualWrite(V1, presBME);
         Blynk.virtualWrite(V2, dewpoint);
         Blynk.virtualWrite(V3, humBME);
         Blynk.virtualWrite(V4, abshumBME);
@@ -338,33 +328,6 @@ void loop() { //This is where all Arduinos store their "do this all the time" co
 }
 
 
-void checkIaqSensorStatus(void)
-{
-  if (iaqSensor.bsecStatus != BSEC_OK) {
-    if (iaqSensor.bsecStatus < BSEC_OK) {
-      output = "BSEC error code : " + String(iaqSensor.bsecStatus);
-      terminal.println(output);
-      //for (;;)
-        //errLeds(); /* Halt in case of failure */
-    } else {
-      output = "BSEC warning code : " + String(iaqSensor.bsecStatus);
-      terminal.println(output);
-    }
-  }
-
-  if (iaqSensor.bme68xStatus != BME68X_OK) {
-    if (iaqSensor.bme68xStatus < BME68X_OK) {
-      output = "BME68X error code : " + String(iaqSensor.bme68xStatus);
-      terminal.println(output);
-      //for (;;)
-        //errLeds(); /* Halt in case of failure */
-    } else {
-      output = "BME68X warning code : " + String(iaqSensor.bme68xStatus);
-      terminal.println(output);
-    }
-  }
-}
-
 void errLeds(void)
 {
 
@@ -375,17 +338,18 @@ void loadState(void)
   if (EEPROM.read(0) == BSEC_MAX_STATE_BLOB_SIZE) {
     // Existing state in EEPROM
     terminal.println("**Reading state from EEPROM");
-            terminal.print(Time.timeStr()); //print current time to Blynk terminal
-        terminal.println("**");
+            terminal.println(Time.timeStr()); //print current time to Blynk terminal
+        
        
     for (uint8_t i = 0; i < BSEC_MAX_STATE_BLOB_SIZE; i++) {
       bsecState[i] = EEPROM.read(i + 1);
-      terminal.println(bsecState[i], HEX);
-      terminal.flush();
-    }
+      terminal.print(bsecState[i], HEX);
 
+    }
+    terminal.println("**");
+    terminal.flush();
     iaqSensor.setState(bsecState);
-    checkIaqSensorStatus();
+    
   } else {
     // Erase the EEPROM with zeroes
     terminal.println("**Erasing EEPROM");
@@ -399,39 +363,127 @@ void loadState(void)
   }
 }
 
-void updateState(void)
+void updateBsecState(Bsec2 bsec)
 {
-  bool update = false;
-  if (stateUpdateCounter == 0) {
-    /* First state update when IAQ accuracy is >= 3 */
-    if (iaqSensor.iaqAccuracy >= 3) {
-      update = true;
-      stateUpdateCounter++;
-    }
-  } else {
-    /* Update every STATE_SAVE_PERIOD minutes */
-    if ((stateUpdateCounter * STATE_SAVE_PERIOD) < millis()) {
-      update = true;
-      stateUpdateCounter++;
-    }
-  }
+    static uint16_t stateUpdateCounter = 0;
+    bool update = false;
 
-  if (update) {
-    iaqSensor.getState(bsecState);
-    checkIaqSensorStatus();
-
-    terminal.println("**Writing state to EEPROM");
-        terminal.print(Time.timeStr()); //print current time to Blynk terminal
-        terminal.println("**");
-        
-    for (uint8_t i = 0; i < BSEC_MAX_STATE_BLOB_SIZE ; i++) {
-      EEPROM.write(i + 1, bsecState[i]);
-      terminal.println(bsecState[i], HEX);
-      terminal.flush();
+    if (!stateUpdateCounter || (stateUpdateCounter * STATE_SAVE_PERIOD) < millis())
+    {
+        /* Update every STATE_SAVE_PERIOD minutes */
+        update = true;
+        stateUpdateCounter++;
     }
 
-    EEPROM.write(0, BSEC_MAX_STATE_BLOB_SIZE);
-    //EEPROM.commit();
-  }
+    if (update && !saveState(bsec))
+        checkBsecStatus(bsec);
 }
 
+
+
+
+
+bool saveState(Bsec2 bsec)
+{
+
+    if (!bsec.getState(bsecState))
+        return false;
+
+    terminal.println("**Writing state to EEPROM");
+        terminal.println(Time.timeStr()); //print current time to Blynk terminal
+
+    for (uint8_t i = 0; i < BSEC_MAX_STATE_BLOB_SIZE; i++)
+    {
+        EEPROM.write(i + 1, bsecState[i]);
+        terminal.print(bsecState[i], HEX);
+    }
+    terminal.println("**");
+    terminal.flush();
+    EEPROM.write(0, BSEC_MAX_STATE_BLOB_SIZE);
+
+
+    return true;
+}
+
+void checkBsecStatus(Bsec2 bsec)
+{
+    if (bsec.status < BSEC_OK)
+    {
+        terminal.println("BSEC error code : " + String(bsec.status));
+        terminal.flush();
+        //errLeds(); /* Halt in case of failure */
+    } else if (bsec.status > BSEC_OK)
+    {
+        terminal.println("BSEC warning code : " + String(bsec.status));
+        terminal.flush();
+    }
+
+    if (bsec.sensor.status < BME68X_OK)
+    {
+        terminal.println("BME68X error code : " + String(bsec.sensor.status));
+        terminal.flush();
+        //errLeds(); /* Halt in case of failure */
+    } else if (bsec.sensor.status > BME68X_OK)
+    {
+        terminal.println("BME68X warning code : " + String(bsec.sensor.status));
+        terminal.flush();
+    }
+}
+
+void newDataCallback(const bme68xData data, const bsecOutputs outputs, Bsec2 bsec)
+{
+    if (!outputs.nOutputs)
+        return;
+
+    Serial.println("BSEC outputs:\n\ttimestamp = " + String((int) (outputs.output[0].time_stamp / INT64_C(1000000))));
+    for (uint8_t i = 0; i < outputs.nOutputs; i++)
+    {
+        const bsecData output  = outputs.output[i];
+        switch (output.sensor_id)
+        {
+        
+
+
+
+            case BSEC_OUTPUT_RAW_GAS:
+                gasBME = (1 / (output.signal / 1000.0)) * 10;
+                break;
+            case BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE:
+                tempBME = output.signal;
+                break;
+            case BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY:
+                humBME = output.signal;
+                break;
+            case BSEC_OUTPUT_IAQ:
+            bmeiaq = output.signal;
+            bmeiaqAccuracy = output.accuracy;
+                break;
+            case BSEC_OUTPUT_STATIC_IAQ:
+            bmestaticIaq = output.signal;
+                break;
+            case BSEC_OUTPUT_CO2_EQUIVALENT:
+            bmeco2Equivalent = output.signal;
+                break;
+            case BSEC_OUTPUT_BREATH_VOC_EQUIVALENT:
+            bmebreathVocEquivalent = output.signal;
+                break;
+            case BSEC_OUTPUT_RAW_PRESSURE:
+            presBME = (output.signal / 100.0);
+                break;
+            case BSEC_OUTPUT_STABILIZATION_STATUS:
+            bmestabStatus = output.signal;
+                break;
+            case BSEC_OUTPUT_RUN_IN_STATUS:
+            bmerunInStatus = output.signal;
+                break;
+            case BSEC_OUTPUT_GAS_PERCENTAGE:
+            bmegasPercentage = output.signal;
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    updateBsecState(iaqSensor);
+}
