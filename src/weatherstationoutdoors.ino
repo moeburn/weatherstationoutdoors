@@ -212,13 +212,7 @@ terminal.println("");
 
 void loop() { //Do all the time
 
-                    if (iaqSensor.run()) { // If new data is available
-                
-                
-            } else {
-             
-            }
-
+    iaqSensor.run();
     pms7003.Read();
     Blynk.run();
     if (menuValue == 1) {RGB.control(false);}
@@ -268,7 +262,7 @@ void loop() { //Do all the time
         sensors.requestTemperatures();
 
 
-        ds18temp = sensors.getTempCByIndex(0);
+        //ds18temp = sensors.getTempCByIndex(0);
         new1p0 = pms7003.GetData(pms7003.pm1_0);
         new2p5 = pms7003.GetData(pms7003.pm2_5);
         new10 = pms7003.GetData(pms7003.pm10);
@@ -286,14 +280,14 @@ void loop() { //Do all the time
         
         abshumBME = (6.112 * pow(2.71828, ((17.67 * tempBME)/(tempBME + 243.5))) * humBME * 2.1674)/(273.15 + tempBME); //calculate absolute humidity
         dewpoint = tempBME - ((100 - humBME)/5); //calculate dewpoint
-        humidex = ds18temp + 0.5555 * (6.11 * pow(2.71828, 5417.7530*( (1/273.16) - (1/(273.15 + dewpoint)) ) ) - 10); //calculate humidex using Environment Canada formula
+        humidex = tempBME + 0.5555 * (6.11 * pow(2.71828, 5417.7530*( (1/273.16) - (1/(273.15 + dewpoint)) ) ) - 10); //calculate humidex using Environment Canada formula
         sliderValue = new2p5;
-        Blynk.virtualWrite(V0, ds18temp);
+        Blynk.virtualWrite(V0, tempBME);
         Blynk.virtualWrite(V1, presBME);
         Blynk.virtualWrite(V2, dewpoint);
         Blynk.virtualWrite(V3, humBME);
         Blynk.virtualWrite(V4, abshumBME);
-        Blynk.virtualWrite(V5, sensors.getTempCByIndex(1));
+        Blynk.virtualWrite(V5, sensors.getTempCByIndex(0));
         Blynk.virtualWrite(V6, tempBME);
         Blynk.virtualWrite(V7, gasBME);
         Blynk.virtualWrite(V8, new1p0);
