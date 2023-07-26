@@ -398,7 +398,6 @@ unsigned long now = millis();
         Blynk.virtualWrite(V4, abshumBME);
         Blynk.virtualWrite(V17, humidex);
         }
-        Blynk.virtualWrite(V52, bmeiaq);
         if (tempPool > 0) {Blynk.virtualWrite(V5, tempPool);}
         Blynk.virtualWrite(V6, tempBME);
         Blynk.virtualWrite(V7, gasBME);
@@ -421,7 +420,7 @@ unsigned long now = millis();
         Blynk.virtualWrite(V29, bmerunInStatus);
         Blynk.virtualWrite(V30, bmegasPercentage);
         Blynk.virtualWrite(V31, WiFi.RSSI());
-        if (bridgedata > 0) {Blynk.virtualWrite(V52, bridgedata);}
+        if (bridgedata > 0) {Blynk.virtualWrite(V53, bridgedata);}
         
         //terminal.print(WiFi.RSSI());
         //terminal.println(output);
