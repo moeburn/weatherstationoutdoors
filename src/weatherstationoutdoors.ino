@@ -18,7 +18,12 @@
 
 
 #include "math.h"
-#include "config/bme680_iaq_33v_3s_4d/bsec_iaq.h"
+#include "config/bme680_iaq_33v_3s_28d/bsec_iaq.h"
+#include <Average.h>
+
+Average<float> pm1Avg(30);
+Average<float> pm25Avg(30);
+Average<float> pm10Avg(30);
 //const uint8_t bsec_config_iaq[] = {2,9,4,1,61,0,0,0,0,0,0,0,182,1,0,0,52,0,1,0,0,192,168,71,64,49,119,76,0,0,97,69,0,0,97,69,137,65,0,191,205,204,204,190,0,0,64,191,225,122,148,190,10,0,3,0,216,85,0,100,0,0,96,64,23,183,209,56,28,0,2,0,0,244,1,150,0,50,0,0,128,64,0,0,32,65,144,1,0,0,112,65,0,0,0,63,16,0,3,0,10,215,163,60,10,215,35,59,10,215,35,59,13,0,5,0,0,0,0,0,1,35,41,29,86,88,0,9,0,229,208,34,62,0,0,0,0,0,0,0,0,218,27,156,62,225,11,67,64,0,0,160,64,0,0,0,0,0,0,0,0,94,75,72,189,93,254,159,64,66,62,160,191,0,0,0,0,0,0,0,0,33,31,180,190,138,176,97,64,65,241,99,190,0,0,0,0,0,0,0,0,167,121,71,61,165,189,41,192,184,30,189,64,12,0,10,0,0,0,0,0,0,0,0,0,229,0,254,0,2,1,5,48,117,100,0,44,1,112,23,151,7,132,3,197,0,92,4,144,1,64,1,64,1,144,1,48,117,48,117,48,117,48,117,100,0,100,0,100,0,48,117,48,117,48,117,100,0,100,0,48,117,48,117,100,0,100,0,100,0,100,0,48,117,48,117,48,117,100,0,100,0,100,0,48,117,48,117,100,0,100,0,44,1,44,1,44,1,44,1,44,1,44,1,44,1,44,1,44,1,44,1,44,1,44,1,44,1,44,1,8,7,8,7,8,7,8,7,8,7,8,7,8,7,8,7,8,7,8,7,8,7,8,7,8,7,8,7,112,23,112,23,112,23,112,23,112,23,112,23,112,23,112,23,112,23,112,23,112,23,112,23,112,23,112,23,255,255,255,255,255,255,255,255,220,5,220,5,220,5,255,255,255,255,255,255,220,5,220,5,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,44,1,0,0,0,0,159,253,0,0};
 
 
@@ -78,12 +83,12 @@ float old1p0, old2p5, old10, new1p0, new2p5, new10;
 
 char auth[] = "X_pnRUFOab29d3aNrScsKq1dryQYdTw7"; //auth token for Blynk - this is a LOCAL token, can't be used without LAN access
 
-float abshumBME, tempBME, presBME, humBME, ds18temp, gasBME;
+float abshumBME, tempBME, presBME, humBME, ds18temp, gasBME, tempPool;
 
 
 int debugcounter = 105;
 int firstvalue = 1;  //important, do not delete
-
+int bridgedata;
 int history = 2;
 int historycount = history;
 float sensoravg;
@@ -116,6 +121,7 @@ float bmeiaq, bmeiaqAccuracy, bmestaticIaq, bmeco2Equivalent, bmebreathVocEquiva
 
 unsigned long lastmillis = 0;
 unsigned long millisBlynk = 0;
+unsigned long millisAvg = 0;
 unsigned long deltamillis = 0;
 unsigned long rgbmillis = 0;
 int pagetimer = 0;
@@ -141,6 +147,9 @@ PMS7003Serial<USARTSerial> pms7003(Serial1, D6);  //start up the PMS laser parti
 
 WidgetTerminal terminal(V19); //terminal widget
 
+STARTUP(WiFi.selectAntenna(ANT_AUTO));
+SYSTEM_THREAD(ENABLED);
+
 BLYNK_WRITE(V21)
 {
    menuValue = param.asInt(); // assigning incoming value from pin V1 to a variable
@@ -154,7 +163,109 @@ BLYNK_WRITE(V18)
 }
 
 BLYNK_WRITE(V19)
-{terminal.flush();}
+{
+    if (String("help") == param.asStr()) 
+    {
+    terminal.println("==List of available commands:==");
+    terminal.println("wifi");
+    terminal.println("antint");
+    terminal.println("antext");
+    terminal.println("antauto");
+    terminal.println("temps");
+    terminal.println("wets");
+    terminal.println("particles");
+    terminal.println("bsec");
+     terminal.println("==End of list.==");
+    }
+        if (String("wifi") == param.asStr()) 
+    {
+        terminal.print("Connected to: ");
+        terminal.println(WiFi.SSID());
+        terminal.print("IP address:");
+        terminal.println(WiFi.localIP());
+        terminal.print("Signal strength: ");
+        terminal.println(WiFi.RSSI());
+    }
+    if (String("antint") == param.asStr()) 
+    {
+        WiFi.selectAntenna(ANT_INTERNAL);
+    }
+    if (String("antext") == param.asStr()) 
+    {
+        WiFi.selectAntenna(ANT_EXTERNAL);
+    }
+    if (String("antauto") == param.asStr()) 
+    {
+        WiFi.selectAntenna(ANT_AUTO);
+    }
+
+    if (String("temps") == param.asStr()) {
+        terminal.print("tempBME[v0],tempPool[v5],humidex[v17],dewpoint[v2]: ");
+        terminal.print(tempBME);
+        terminal.print(",");
+        terminal.print(tempPool);
+        terminal.print(",");
+        terminal.print(humidex);
+        terminal.print(",");
+        terminal.println(dewpoint);
+    }
+    if (String("wets") == param.asStr()) {
+        terminal.print("humBME[v3],abshumBME[v4],presBME[v1],gasBME[v7]: ");
+        terminal.print(humBME);
+        terminal.print(",");
+        terminal.print(abshumBME);
+        terminal.print(",");
+        terminal.print(presBME);
+        terminal.print(",");
+        terminal.println(gasBME);
+    }
+    if (String("particles") == param.asStr()) {
+        terminal.print("pm1[v8],pm2.5[v9],pm10[v10],0.3um[v11],0.5um[v12],1um[v13],2.5um[v14],5um[v15],10um[v16]");
+        terminal.print(new1p0);
+        terminal.print(",");
+        terminal.print(new2p5);
+        terminal.print(",");
+        terminal.print(new10);
+        terminal.print(",");
+        terminal.print(pms7003.GetData(pms7003.count0_3um));
+        terminal.print(",");
+        terminal.print(pms7003.GetData(pms7003.count0_5um));
+        terminal.print(",");
+        terminal.print(pms7003.GetData(pms7003.count1um));
+        terminal.print(",");
+        terminal.print(pms7003.GetData(pms7003.count2_5um));
+        terminal.print(",");
+        terminal.print(pms7003.GetData(pms7003.count5um));
+        terminal.print(",");
+        terminal.println(pms7003.GetData(pms7003.count10um));
+    }
+    if (String("bsec") == param.asStr()) {
+        terminal.print("bmeiaq[v23],bmeiaqAccuracy[v24],bmestaticIaq[v25],bmeco2Equivalent[v26],bmebreathVocEquivalent[v27],bmestabStatus[v28],bmerunInStatus[v29],bmegasPercentage[v30]:");
+        terminal.print(bmeiaq);
+        terminal.print(",");
+        terminal.print(bmeiaqAccuracy);
+        terminal.print(",");
+        terminal.print(bmestaticIaq);
+        terminal.print(",");
+        terminal.print(bmeco2Equivalent);
+        terminal.print(",");
+        terminal.print(bmebreathVocEquivalent);
+        terminal.print(",");
+        terminal.print(bmestabStatus);
+        terminal.print(",");
+        terminal.print(bmerunInStatus);
+        terminal.print(",");
+        terminal.println(bmegasPercentage);
+    }
+    
+    terminal.flush();
+
+}
+
+BLYNK_WRITE(V51){
+    float pinData = param.asFloat();
+    bridgedata = pinData;
+}
 
 
 void setup() { //This is where all Arduinos store the on-bootup code
@@ -170,14 +281,18 @@ void setup() { //This is where all Arduinos store the on-bootup code
     bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
     bme.setGasHeater(320, 150); // 320*C for 150 ms*/
     output = "\nBSEC library version " + String(iaqSensor.version.major) + "." + String(iaqSensor.version.minor) + "." + String(iaqSensor.version.major_bugfix) + "." + String(iaqSensor.version.minor_bugfix);
-    delay(5000); //Required to stabilize wifi
+    delay(2000); //Required to stabilize wifi
     Blynk.begin(auth, IPAddress(192,168,50,197), 8080);
     terminal.clear();
     terminal.println("********************************");
     terminal.println("STARTING OUTDOOR WEATHER STATION");
     terminal.println(output);
-
-terminal.println("");
+    terminal.print("Connected to: ");
+    terminal.println(WiFi.SSID());
+    terminal.print("IP address:");
+    terminal.println(WiFi.localIP());
+    terminal.print("Signal strength: ");
+    terminal.println(WiFi.RSSI());
         
     bsec_virtual_sensor_t sensorList[13] = {
     BSEC_OUTPUT_IAQ,
@@ -202,7 +317,7 @@ terminal.println("");
   iaqSensor.updateSubscription(sensorList, 13, BSEC_SAMPLE_RATE_LP);
   iaqSensor.attachCallback(newDataCallback);
     // Print the header
-    terminal.println("********************************");
+    terminal.println("****TYPE help FOR A LIST OF COMMANDS****");
     terminal.flush();
 
 
@@ -210,10 +325,16 @@ terminal.println("");
     sensors.begin();
 }
 
-void loop() { //Do all the time
+unsigned long last = 0;
+unsigned long last_pm_reading = 0;
 
+
+void loop() { //Do all the time
+unsigned long now = millis();
     iaqSensor.run();
-    pms7003.Read();
+      if (pms7003.Read()) {
+    last_pm_reading = now;
+  }
     Blynk.run();
     if (menuValue == 1) {RGB.control(false);}
     if (menuValue == 2) 
@@ -256,17 +377,70 @@ void loop() { //Do all the time
     
     if (millis() - millisBlynk >= 30000) //every 30 seconds OR on first boot
     {
-
+        pms7003.Read();
         millisBlynk = millis();
         //bme.performReading();
         sensors.requestTemperatures();
 
 
-        //ds18temp = sensors.getTempCByIndex(0);
+        
+        tempPool = sensors.getTempCByIndex(0);
+        abshumBME = (6.112 * pow(2.71828, ((17.67 * tempBME)/(tempBME + 243.5))) * humBME * 2.1674)/(273.15 + tempBME); //calculate absolute humidity
+        dewpoint = tempBME - ((100 - humBME)/5); //calculate dewpoint
+        humidex = tempBME + 0.5555 * (6.11 * pow(2.71828, 5417.7530*( (1/273.16) - (1/(273.15 + dewpoint)) ) ) - 10); //calculate humidex using Environment Canada formula
+        sliderValue = new2p5;
+        if ((tempBME == 0) && (humBME == 0)) {}
+        else {
+        Blynk.virtualWrite(V0, tempBME);
+        Blynk.virtualWrite(V1, presBME);
+        Blynk.virtualWrite(V2, dewpoint);
+        Blynk.virtualWrite(V3, humBME);
+        Blynk.virtualWrite(V4, abshumBME);
+        Blynk.virtualWrite(V17, humidex);
+        }
+        Blynk.virtualWrite(V52, bmeiaq);
+        if (tempPool > 0) {Blynk.virtualWrite(V5, tempPool);}
+        Blynk.virtualWrite(V6, tempBME);
+        Blynk.virtualWrite(V7, gasBME);
+        Blynk.virtualWrite(V8, pm1Avg.mean());
+        Blynk.virtualWrite(V9, pm25Avg.mean());
+        Blynk.virtualWrite(V10, pm10Avg.mean());
+        Blynk.virtualWrite(V11, pms7003.GetData(pms7003.count0_3um));
+        Blynk.virtualWrite(V12, pms7003.GetData(pms7003.count0_5um));
+        Blynk.virtualWrite(V13, pms7003.GetData(pms7003.count1um));
+        Blynk.virtualWrite(V14, pms7003.GetData(pms7003.count2_5um));
+        Blynk.virtualWrite(V15, pms7003.GetData(pms7003.count5um));
+        Blynk.virtualWrite(V16, pms7003.GetData(pms7003.count10um));
+        
+        Blynk.virtualWrite(V23, bmeiaq);
+        Blynk.virtualWrite(V24, bmeiaqAccuracy);
+        Blynk.virtualWrite(V25, bmestaticIaq);
+        Blynk.virtualWrite(V26, bmeco2Equivalent);
+        Blynk.virtualWrite(V27, bmebreathVocEquivalent);
+        Blynk.virtualWrite(V28, bmestabStatus);
+        Blynk.virtualWrite(V29, bmerunInStatus);
+        Blynk.virtualWrite(V30, bmegasPercentage);
+        Blynk.virtualWrite(V31, WiFi.RSSI());
+        if (bridgedata > 0) {Blynk.virtualWrite(V52, bridgedata);}
+        
+        //terminal.print(WiFi.RSSI());
+        //terminal.println(output);
+        //terminal.print("Last update: ");
+        //terminal.print(Time.timeStr()); //print current time to Blynk terminal
+        //terminal.println("");
+        terminal.flush();
+        firstvalue = 0; //we have run once now, no longer first run
+    }
+
+      if ((now - last) > 2300) {
+    // Let us be generous. Active state the device
+    // reports at least every 2.3 seconds.
+    if ((now - last_pm_reading) > 2300) {
+      Serial.println("No reading for at least 10 seconds!");
+    } else {
         new1p0 = pms7003.GetData(pms7003.pm1_0);
         new2p5 = pms7003.GetData(pms7003.pm2_5);
         new10 = pms7003.GetData(pms7003.pm10);
-        
         if (firstvalue == 0)  //do not do this on the first run
         {
             if (new1p0 > 200) {new1p0 = old1p0;} //check for data spikes in particle counter, ignore data that is >200
@@ -276,49 +450,19 @@ void loop() { //Do all the time
             if (new2p5 - old2p5 > 50) {new2p5 = old2p5;}
             if (new10 - old10 > 50) {new10 = old10;}
         }
-        
-        
-        abshumBME = (6.112 * pow(2.71828, ((17.67 * tempBME)/(tempBME + 243.5))) * humBME * 2.1674)/(273.15 + tempBME); //calculate absolute humidity
-        dewpoint = tempBME - ((100 - humBME)/5); //calculate dewpoint
-        humidex = tempBME + 0.5555 * (6.11 * pow(2.71828, 5417.7530*( (1/273.16) - (1/(273.15 + dewpoint)) ) ) - 10); //calculate humidex using Environment Canada formula
-        sliderValue = new2p5;
-        Blynk.virtualWrite(V0, tempBME);
-        Blynk.virtualWrite(V1, presBME);
-        Blynk.virtualWrite(V2, dewpoint);
-        Blynk.virtualWrite(V3, humBME);
-        Blynk.virtualWrite(V4, abshumBME);
-        Blynk.virtualWrite(V5, sensors.getTempCByIndex(0));
-        Blynk.virtualWrite(V6, tempBME);
-        Blynk.virtualWrite(V7, gasBME);
-        Blynk.virtualWrite(V8, new1p0);
-        Blynk.virtualWrite(V9, new2p5);
-        Blynk.virtualWrite(V10, new10);
-        Blynk.virtualWrite(V11, pms7003.GetData(pms7003.count0_3um));
-        Blynk.virtualWrite(V12, pms7003.GetData(pms7003.count0_5um));
-        Blynk.virtualWrite(V13, pms7003.GetData(pms7003.count1um));
-        Blynk.virtualWrite(V14, pms7003.GetData(pms7003.count2_5um));
-        Blynk.virtualWrite(V15, pms7003.GetData(pms7003.count5um));
-        Blynk.virtualWrite(V16, pms7003.GetData(pms7003.count10um));
-        Blynk.virtualWrite(V17, humidex);
-        Blynk.virtualWrite(V23, bmeiaq);
-        Blynk.virtualWrite(V24, bmeiaqAccuracy);
-        Blynk.virtualWrite(V25, bmestaticIaq);
-        Blynk.virtualWrite(V26, bmeco2Equivalent);
-        Blynk.virtualWrite(V27, bmebreathVocEquivalent);
-        Blynk.virtualWrite(V28, bmestabStatus);
-        Blynk.virtualWrite(V29, bmerunInStatus);
-        Blynk.virtualWrite(V30, bmegasPercentage);
-
-        //terminal.println(output);
-        //terminal.print("Last update: ");
-        //terminal.print(Time.timeStr()); //print current time to Blynk terminal
-        //terminal.println("");
-        //terminal.flush();
+        pm1Avg.push(new1p0);
+        pm25Avg.push(new2p5);
+        pm10Avg.push(new10);
         old1p0 = new1p0; //reset data spike check variable
         old2p5 = new2p5;
         old10 = new10;
-        firstvalue = 0; //we have run once now, no longer first run
+        firstvalue = 0;
     }
+    last = now;
+    }
+
+
+
 }
 
 
@@ -392,6 +536,7 @@ bool saveState(Bsec2 bsec)
         terminal.print(bsecState[i], HEX);
     }
     terminal.println("**");
+    terminal.println("****TYPE help FOR A LIST OF COMMANDS****");
     terminal.flush();
     EEPROM.write(0, BSEC_MAX_STATE_BLOB_SIZE);
 
