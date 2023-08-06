@@ -24,6 +24,7 @@
 Average<float> pm1Avg(30);
 Average<float> pm25Avg(30);
 Average<float> pm10Avg(30);
+Average<float> tempPoolAvg(10);
 //const uint8_t bsec_config_iaq[] = {2,9,4,1,61,0,0,0,0,0,0,0,182,1,0,0,52,0,1,0,0,192,168,71,64,49,119,76,0,0,97,69,0,0,97,69,137,65,0,191,205,204,204,190,0,0,64,191,225,122,148,190,10,0,3,0,216,85,0,100,0,0,96,64,23,183,209,56,28,0,2,0,0,244,1,150,0,50,0,0,128,64,0,0,32,65,144,1,0,0,112,65,0,0,0,63,16,0,3,0,10,215,163,60,10,215,35,59,10,215,35,59,13,0,5,0,0,0,0,0,1,35,41,29,86,88,0,9,0,229,208,34,62,0,0,0,0,0,0,0,0,218,27,156,62,225,11,67,64,0,0,160,64,0,0,0,0,0,0,0,0,94,75,72,189,93,254,159,64,66,62,160,191,0,0,0,0,0,0,0,0,33,31,180,190,138,176,97,64,65,241,99,190,0,0,0,0,0,0,0,0,167,121,71,61,165,189,41,192,184,30,189,64,12,0,10,0,0,0,0,0,0,0,0,0,229,0,254,0,2,1,5,48,117,100,0,44,1,112,23,151,7,132,3,197,0,92,4,144,1,64,1,64,1,144,1,48,117,48,117,48,117,48,117,100,0,100,0,100,0,48,117,48,117,48,117,100,0,100,0,48,117,48,117,100,0,100,0,100,0,100,0,48,117,48,117,48,117,100,0,100,0,100,0,48,117,48,117,100,0,100,0,44,1,44,1,44,1,44,1,44,1,44,1,44,1,44,1,44,1,44,1,44,1,44,1,44,1,44,1,8,7,8,7,8,7,8,7,8,7,8,7,8,7,8,7,8,7,8,7,8,7,8,7,8,7,8,7,112,23,112,23,112,23,112,23,112,23,112,23,112,23,112,23,112,23,112,23,112,23,112,23,112,23,112,23,255,255,255,255,255,255,255,255,220,5,220,5,220,5,255,255,255,255,255,255,220,5,220,5,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,44,1,0,0,0,0,159,253,0,0};
 
 
@@ -212,7 +213,7 @@ BLYNK_WRITE(V19)
         terminal.print("tempBME[v0],tempPool[v5],humidex[v17],dewpoint[v2]: ");
         terminal.print(tempBME);
         terminal.print(",");
-        terminal.print(tempPool);
+        terminal.print(sensors.getTempCByIndex(0));
         terminal.print(",");
         terminal.print(humidex);
         terminal.print(",");
@@ -292,7 +293,7 @@ void setup() { //This is where all Arduinos store the on-bootup code
     bme.setPressureOversampling(BME680_OS_4X);
     bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
     bme.setGasHeater(320, 150); // 320*C for 150 ms*/
-    terminal.clear();
+    //terminal.clear();
     if(!iaqSensor.begin(BME68X_I2C_ADDR_HIGH, Wire))
     {terminal.println("Begin failure");}
     output = "\nBSEC library version " + String(iaqSensor.version.major) + "." + String(iaqSensor.version.minor) + "." + String(iaqSensor.version.major_bugfix) + "." + String(iaqSensor.version.minor_bugfix);
@@ -300,7 +301,7 @@ void setup() { //This is where all Arduinos store the on-bootup code
     Blynk.begin(auth, IPAddress(192,168,50,197), 8080);
     
     terminal.println("********************************");
-    terminal.println("BEGIN OUTDOOR WEATHER STATION v2");
+    terminal.println("BEGIN OUTDOOR WEATHER STATION v2.1");
     terminal.println(output);
     terminal.print("Connected to: ");
     terminal.println(WiFi.SSID());
@@ -308,6 +309,7 @@ void setup() { //This is where all Arduinos store the on-bootup code
     terminal.println(WiFi.localIP());
     terminal.print("Signal strength: ");
     terminal.println(WiFi.RSSI());
+    terminal.println(Time.timeStr());
         
     bsec_virtual_sensor_t sensorList[13] = {
     BSEC_OUTPUT_IAQ,
@@ -348,6 +350,7 @@ void setup() { //This is where all Arduinos store the on-bootup code
 
 unsigned long last = 0;
 unsigned long last_pm_reading = 0;
+unsigned long millisPool = 0;
 
 
 void loop() { //Do all the time
@@ -357,9 +360,7 @@ unsigned long now = millis();
     last_pm_reading = now;
   }
     Blynk.run();
-    if (menuValue == 1) {RGB.control(false);}
-    if (menuValue == 2) 
-    {
+
         pmG = 55 - sliderValue;
         if (pmG < 0) {pmG = 0;}
         pmG *= (255.0/55.0);
@@ -377,26 +378,21 @@ unsigned long now = millis();
         
         
         
-        if (rgbON == true) {RGB.color(pmR, pmG, pmB);}
-        else {RGB.color(0, 0, 0);}
-        if (sliderValue > 55)
-            {
-                if (millis() - rgbmillis >= 500)
-                {
-                    if (rgbON) {rgbON = false;}
-                    else {rgbON = true;}
-                    rgbmillis = millis();
-                }
-            }
-        else rgbON = true;
-    } 
+        RGB.color(pmR, pmG, pmB);
+        
+    
     if (menuValue == 3) 
         {
-        RGB.control(true);
         RGB.color(zebraR, zebraG, zebraB);
         }
+
+    if (millis() - millisPool >= 3000) //every 3 seconds 
+    {
+        tempPool = sensors.getTempCByIndex(0);
+        if (tempPool > 0) {tempPoolAvg.push(tempPool);}
+    }
     
-    if (millis() - millisBlynk >= 30000) //every 30 seconds OR on first boot
+    if (millis() - millisBlynk >= 30000) //every 30 seconds 
     {
         pms7003.Read();
         millisBlynk = millis();
@@ -405,7 +401,7 @@ unsigned long now = millis();
 
 
         
-        tempPool = sensors.getTempCByIndex(0);
+        
         abshumBME = (6.112 * pow(2.71828, ((17.67 * tempBME)/(tempBME + 243.5))) * humBME * 2.1674)/(273.15 + tempBME); //calculate absolute humidity
         dewpoint = tempBME - ((100 - humBME)/5); //calculate dewpoint
         humidex = tempBME + 0.5555 * (6.11 * pow(2.71828, 5417.7530*( (1/273.16) - (1/(273.15 + dewpoint)) ) ) - 10); //calculate humidex using Environment Canada formula
@@ -419,7 +415,7 @@ unsigned long now = millis();
         Blynk.virtualWrite(V4, abshumBME);
         Blynk.virtualWrite(V17, humidex);
         }
-        if (tempPool > 0) {Blynk.virtualWrite(V5, tempPool);}
+        Blynk.virtualWrite(V5, tempPoolAvg.mean());
         Blynk.virtualWrite(V6, tempBME);
         Blynk.virtualWrite(V7, gasBME);
         Blynk.virtualWrite(V8, pm1Avg.mean());
@@ -448,7 +444,7 @@ unsigned long now = millis();
         //terminal.print("Last update: ");
         //terminal.print(Time.timeStr()); //print current time to Blynk terminal
         //terminal.println("");
-        terminal.flush();
+        //terminal.flush();
         firstvalue = 0; //we have run once now, no longer first run
     }
 
@@ -456,7 +452,7 @@ unsigned long now = millis();
     // Let us be generous. Active state the device
     // reports at least every 2.3 seconds.
     if ((now - last_pm_reading) > 2300) {
-      Serial.println("No reading for at least 10 seconds!");
+      //Serial.println("No reading for at least 10 seconds!");
     } else {
         new1p0 = pms7003.GetData(pms7003.pm1_0);
         new2p5 = pms7003.GetData(pms7003.pm2_5);
