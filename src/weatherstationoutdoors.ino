@@ -32,7 +32,7 @@ DallasTemperature sensors(&oneWire);  //start up the DS18 temp probes
 //Adafruit_BME680 bme; // start up the BME680 weather probe via I2C
 
 #define STATE_SAVE_PERIOD	UINT32_C(360 * 60 * 1000)
-
+#define USE_EEPROM
 
 /**
  * @brief : This function checks the BSEC status, prints the respective error code. Halts in case of error
@@ -68,10 +68,10 @@ bool saveState(Bsec2 bsec);
 
 //TODO: MANY OF THESE DECLARATIONS ARE OLD AND UNUSED.  
 
-void checkIaqSensorStatus(void);
-void errLeds(void);
-void updateState(void);
-void loadState(void);
+//void checkIaqSensorStatus(void);
+//void errLeds(void);
+//void updateState(void);
+//void loadState(void);
 Bsec2 iaqSensor;
 static uint8_t bsecState[BSEC_MAX_STATE_BLOB_SIZE];
 uint16_t stateUpdateCounter = 0;
@@ -88,7 +88,7 @@ float abshumBME, tempBME, presBME, humBME, ds18temp, gasBME, tempPool;
 
 int debugcounter = 105;
 int firstvalue = 1;  //important, do not delete
-int bridgedata;
+float bridgedata;
 int history = 2;
 int historycount = history;
 float sensoravg;
@@ -147,8 +147,8 @@ PMS7003Serial<USARTSerial> pms7003(Serial1, D6);  //start up the PMS laser parti
 
 WidgetTerminal terminal(V19); //terminal widget
 
-STARTUP(WiFi.selectAntenna(ANT_AUTO));
-SYSTEM_THREAD(ENABLED);
+STARTUP(WiFi.selectAntenna(ANT_INTERNAL));
+//SYSTEM_THREAD(ENABLED);
 
 BLYNK_WRITE(V21)
 {
@@ -171,6 +171,7 @@ BLYNK_WRITE(V19)
     terminal.println("antint");
     terminal.println("antext");
     terminal.println("antauto");
+    terminal.println("erase");
     terminal.println("temps");
     terminal.println("wets");
     terminal.println("particles");
@@ -198,7 +199,15 @@ BLYNK_WRITE(V19)
     {
         WiFi.selectAntenna(ANT_AUTO);
     }
-
+    if (String("erase") == param.asStr())
+    {
+        terminal.println("**Erasing EEPROM");
+        terminal.print(Time.timeStr()); //print current time to Blynk terminal
+        terminal.println("**");
+        terminal.flush();
+    for (uint8_t i = 0; i < BSEC_MAX_STATE_BLOB_SIZE + 1; i++)
+      EEPROM.write(i, 0);
+    }
     if (String("temps") == param.asStr()) {
         terminal.print("tempBME[v0],tempPool[v5],humidex[v17],dewpoint[v2]: ");
         terminal.print(tempBME);
@@ -273,19 +282,25 @@ void setup() { //This is where all Arduinos store the on-bootup code
     Serial.begin();
     Time.zone(-4);
     Wire.begin();
-    iaqSensor.begin(BME68X_I2C_ADDR_HIGH, Wire);
+      if(EEPROM.hasPendingErase()) {
+    EEPROM.performPendingErase();
+  }
+    
     /*bme.begin();
     bme.setTemperatureOversampling(BME680_OS_8X);
     bme.setHumidityOversampling(BME680_OS_2X);
     bme.setPressureOversampling(BME680_OS_4X);
     bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
     bme.setGasHeater(320, 150); // 320*C for 150 ms*/
+    terminal.clear();
+    if(!iaqSensor.begin(BME68X_I2C_ADDR_HIGH, Wire))
+    {terminal.println("Begin failure");}
     output = "\nBSEC library version " + String(iaqSensor.version.major) + "." + String(iaqSensor.version.minor) + "." + String(iaqSensor.version.major_bugfix) + "." + String(iaqSensor.version.minor_bugfix);
     delay(2000); //Required to stabilize wifi
     Blynk.begin(auth, IPAddress(192,168,50,197), 8080);
-    terminal.clear();
+    
     terminal.println("********************************");
-    terminal.println("STARTING OUTDOOR WEATHER STATION");
+    terminal.println("BEGIN OUTDOOR WEATHER STATION v2");
     terminal.println(output);
     terminal.print("Connected to: ");
     terminal.println(WiFi.SSID());
@@ -309,20 +324,26 @@ void setup() { //This is where all Arduinos store the on-bootup code
     BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY,
     BSEC_OUTPUT_GAS_PERCENTAGE
   };
+  
   iaqSensor.setTemperatureOffset(1.0);
 
-  iaqSensor.setConfig(bsec_config_iaq);
 
-   loadState();
-  iaqSensor.updateSubscription(sensorList, 13, BSEC_SAMPLE_RATE_LP);
+  if (!iaqSensor.setConfig(bsec_config_iaq))
+  {terminal.println("Config failure");}
+
+    loadState(iaqSensor);
+  if (!iaqSensor.updateSubscription(sensorList, 13, BSEC_SAMPLE_RATE_LP))
+  {terminal.println("Update subscription failure");}
   iaqSensor.attachCallback(newDataCallback);
     // Print the header
     terminal.println("****TYPE help FOR A LIST OF COMMANDS****");
+    checkBsecStatus(iaqSensor);
     terminal.flush();
 
 
     
     sensors.begin();
+    RGB.control(true);
 }
 
 unsigned long last = 0;
@@ -354,7 +375,7 @@ unsigned long now = millis();
         pmB *= (255.0/55.0);
         if (pmB > 255) {pmB = 255;}
         
-        RGB.control(true);
+        
         
         if (rgbON == true) {RGB.color(pmR, pmG, pmB);}
         else {RGB.color(0, 0, 0);}
@@ -470,7 +491,7 @@ void errLeds(void)
 
 }
 
-void loadState(void)
+/*void loadState(void)
 {
   if (EEPROM.read(0) == BSEC_MAX_STATE_BLOB_SIZE) {
     // Existing state in EEPROM
@@ -498,6 +519,40 @@ void loadState(void)
 
     //EEPROM.commit();
   }
+}*/
+
+bool loadState(Bsec2 bsec)
+{
+#ifdef USE_EEPROM
+    
+
+    if (EEPROM.read(0) == BSEC_MAX_STATE_BLOB_SIZE)
+    {
+        /* Existing state in EEPROM */
+        terminal.println("Reading state from EEPROM");
+        terminal.print("State file: ");
+        for (uint8_t i = 0; i < BSEC_MAX_STATE_BLOB_SIZE; i++)
+        {
+            bsecState[i] = EEPROM.read(i + 1);
+            terminal.print(String(bsecState[i], HEX) + ", ");
+        }
+        terminal.println();
+        terminal.flush();
+
+        if (!bsec.setState(bsecState))
+            return false;
+    } else
+    {
+        /* Erase the EEPROM with zeroes */
+        terminal.println("Erasing EEPROM");
+        terminal.flush();
+        for (uint8_t i = 0; i <= BSEC_MAX_STATE_BLOB_SIZE; i++)
+            EEPROM.write(i, 0);
+
+       // EEPROM.commit();
+    }
+#endif
+    return true;
 }
 
 void updateBsecState(Bsec2 bsec)
