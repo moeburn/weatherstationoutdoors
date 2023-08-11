@@ -24,7 +24,7 @@
 Average<float> pm1Avg(30);
 Average<float> pm25Avg(30);
 Average<float> pm10Avg(30);
-Average<float> tempPoolAvg(10);
+Average<float> tempPoolAvg(3);
 //const uint8_t bsec_config_iaq[] = {2,9,4,1,61,0,0,0,0,0,0,0,182,1,0,0,52,0,1,0,0,192,168,71,64,49,119,76,0,0,97,69,0,0,97,69,137,65,0,191,205,204,204,190,0,0,64,191,225,122,148,190,10,0,3,0,216,85,0,100,0,0,96,64,23,183,209,56,28,0,2,0,0,244,1,150,0,50,0,0,128,64,0,0,32,65,144,1,0,0,112,65,0,0,0,63,16,0,3,0,10,215,163,60,10,215,35,59,10,215,35,59,13,0,5,0,0,0,0,0,1,35,41,29,86,88,0,9,0,229,208,34,62,0,0,0,0,0,0,0,0,218,27,156,62,225,11,67,64,0,0,160,64,0,0,0,0,0,0,0,0,94,75,72,189,93,254,159,64,66,62,160,191,0,0,0,0,0,0,0,0,33,31,180,190,138,176,97,64,65,241,99,190,0,0,0,0,0,0,0,0,167,121,71,61,165,189,41,192,184,30,189,64,12,0,10,0,0,0,0,0,0,0,0,0,229,0,254,0,2,1,5,48,117,100,0,44,1,112,23,151,7,132,3,197,0,92,4,144,1,64,1,64,1,144,1,48,117,48,117,48,117,48,117,100,0,100,0,100,0,48,117,48,117,48,117,100,0,100,0,48,117,48,117,100,0,100,0,100,0,100,0,48,117,48,117,48,117,100,0,100,0,100,0,48,117,48,117,100,0,100,0,44,1,44,1,44,1,44,1,44,1,44,1,44,1,44,1,44,1,44,1,44,1,44,1,44,1,44,1,8,7,8,7,8,7,8,7,8,7,8,7,8,7,8,7,8,7,8,7,8,7,8,7,8,7,8,7,112,23,112,23,112,23,112,23,112,23,112,23,112,23,112,23,112,23,112,23,112,23,112,23,112,23,112,23,255,255,255,255,255,255,255,255,220,5,220,5,220,5,255,255,255,255,255,255,220,5,220,5,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,44,1,0,0,0,0,159,253,0,0};
 
 
@@ -83,6 +83,7 @@ float old1p0, old2p5, old10, new1p0, new2p5, new10;
 
 
 char auth[] = "X_pnRUFOab29d3aNrScsKq1dryQYdTw7"; //auth token for Blynk - this is a LOCAL token, can't be used without LAN access
+char remoteAuth[] = "eT_7FL7IUpqonthsAr-58uTK_-su_GYy";
 
 float abshumBME, tempBME, presBME, humBME, ds18temp, gasBME, tempPool;
 
@@ -147,9 +148,12 @@ bool rgbON = true;
 PMS7003Serial<USARTSerial> pms7003(Serial1, D6);  //start up the PMS laser particle counter
 
 WidgetTerminal terminal(V19); //terminal widget
+WidgetBridge bridge1(V60);
 
 STARTUP(WiFi.selectAntenna(ANT_INTERNAL));
-//SYSTEM_THREAD(ENABLED);
+SYSTEM_MODE(SEMI_AUTOMATIC);
+SYSTEM_THREAD(ENABLED);
+
 
 BLYNK_WRITE(V21)
 {
@@ -177,11 +181,13 @@ BLYNK_WRITE(V19)
     terminal.println("wets");
     terminal.println("particles");
     terminal.println("bsec");
+    terminal.println("connect");
+    terminal.println("disconnect");
      terminal.println("==End of list.==");
     }
         if (String("wifi") == param.asStr()) 
     {
-        terminal.print("Connected to: ");
+        terminal.print("> Connected to: ");
         terminal.println(WiFi.SSID());
         terminal.print("IP address:");
         terminal.println(WiFi.localIP());
@@ -202,7 +208,7 @@ BLYNK_WRITE(V19)
     }
     if (String("erase") == param.asStr())
     {
-        terminal.println("**Erasing EEPROM");
+        terminal.println("> **Erasing EEPROM");
         terminal.print(Time.timeStr()); //print current time to Blynk terminal
         terminal.println("**");
         terminal.flush();
@@ -210,17 +216,19 @@ BLYNK_WRITE(V19)
       EEPROM.write(i, 0);
     }
     if (String("temps") == param.asStr()) {
-        terminal.print("tempBME[v0],tempPool[v5],humidex[v17],dewpoint[v2]: ");
+        terminal.print("> tempBME[v0],tempPool[v5],humidex[v17],dewpoint[v2]: ");
         terminal.print(tempBME);
         terminal.print(",");
-        terminal.print(sensors.getTempCByIndex(0));
+        sensors.requestTemperatures();
+        tempPool = sensors.getTempCByIndex(0);
+        terminal.print(tempPool);
         terminal.print(",");
         terminal.print(humidex);
         terminal.print(",");
         terminal.println(dewpoint);
     }
     if (String("wets") == param.asStr()) {
-        terminal.print("humBME[v3],abshumBME[v4],presBME[v1],gasBME[v7]: ");
+        terminal.print("> humBME[v3],abshumBME[v4],presBME[v1],gasBME[v7]: ");
         terminal.print(humBME);
         terminal.print(",");
         terminal.print(abshumBME);
@@ -230,7 +238,7 @@ BLYNK_WRITE(V19)
         terminal.println(gasBME);
     }
     if (String("particles") == param.asStr()) {
-        terminal.print("pm1[v8],pm2.5[v9],pm10[v10],0.3um[v11],0.5um[v12],1um[v13],2.5um[v14],5um[v15],10um[v16]");
+        terminal.print("> pm1[v8],pm2.5[v9],pm10[v10],0.3um[v11],0.5um[v12],1um[v13],2.5um[v14],5um[v15],10um[v16]");
         terminal.print(new1p0);
         terminal.print(",");
         terminal.print(new2p5);
@@ -250,7 +258,7 @@ BLYNK_WRITE(V19)
         terminal.println(pms7003.GetData(pms7003.count10um));
     }
     if (String("bsec") == param.asStr()) {
-        terminal.print("bmeiaq[v23],bmeiaqAccuracy[v24],bmestaticIaq[v25],bmeco2Equivalent[v26],bmebreathVocEquivalent[v27],bmestabStatus[v28],bmerunInStatus[v29],bmegasPercentage[v30]:");
+        terminal.print("> bmeiaq[v23],bmeiaqAccuracy[v24],bmestaticIaq[v25],bmeco2Equivalent[v26],bmebreathVocEquivalent[v27],bmestabStatus[v28],bmerunInStatus[v29],bmegasPercentage[v30]:");
         terminal.print(bmeiaq);
         terminal.print(",");
         terminal.print(bmeiaqAccuracy);
@@ -267,6 +275,20 @@ BLYNK_WRITE(V19)
         terminal.print(",");
         terminal.println(bmegasPercentage);
     }
+    if (String("connect") == param.asStr()) {
+        Particle.connect();
+        terminal.print("> Connecting to Particle cloud...");
+        while (!Particle.connected()) {
+            terminal.print(".");
+            terminal.flush();
+            delay(500);
+            }
+        terminal.println("connected.");
+    }
+    if (String("disconnect") == param.asStr()) {
+        Particle.disconnect();
+        terminal.println("> Disconnecting from Particle cloud.");
+    }
     
     terminal.flush();
 
@@ -279,7 +301,10 @@ BLYNK_WRITE(V51){
 
 
 void setup() { //This is where all Arduinos store the on-bootup code
-  //RGB.control(true); //Turn off Photon's pulsing blue LED
+   WiFi.on();
+  WiFi.connect() ;
+  while (WiFi.connecting()){}
+  Particle.disconnect();
     Serial.begin();
     Time.zone(-4);
     Wire.begin();
@@ -298,10 +323,11 @@ void setup() { //This is where all Arduinos store the on-bootup code
     {terminal.println("Begin failure");}
     output = "\nBSEC library version " + String(iaqSensor.version.major) + "." + String(iaqSensor.version.minor) + "." + String(iaqSensor.version.major_bugfix) + "." + String(iaqSensor.version.minor_bugfix);
     delay(2000); //Required to stabilize wifi
+
     Blynk.begin(auth, IPAddress(192,168,50,197), 8080);
     
     terminal.println("********************************");
-    terminal.println("BEGIN OUTDOOR WEATHER STATION v2.1");
+    terminal.println("BEGIN OUTDOOR WEATHER STATION v2.2");
     terminal.println(output);
     terminal.print("Connected to: ");
     terminal.println(WiFi.SSID());
@@ -339,6 +365,7 @@ void setup() { //This is where all Arduinos store the on-bootup code
   iaqSensor.attachCallback(newDataCallback);
     // Print the header
     terminal.println("****TYPE help FOR A LIST OF COMMANDS****");
+    terminal.println("****TYPE connect TO FLASH FIRMWARE****");
     checkBsecStatus(iaqSensor);
     terminal.flush();
 
@@ -354,12 +381,16 @@ unsigned long millisPool = 0;
 
 
 void loop() { //Do all the time
+
+
+
 unsigned long now = millis();
     iaqSensor.run();
       if (pms7003.Read()) {
     last_pm_reading = now;
   }
-    Blynk.run();
+  Blynk.run();
+    
 
         pmG = 55 - sliderValue;
         if (pmG < 0) {pmG = 0;}
@@ -386,11 +417,7 @@ unsigned long now = millis();
         RGB.color(zebraR, zebraG, zebraB);
         }
 
-    if (millis() - millisPool >= 3000) //every 3 seconds 
-    {
-        tempPool = sensors.getTempCByIndex(0);
-        if (tempPool > 0) {tempPoolAvg.push(tempPool);}
-    }
+
     
     if (millis() - millisBlynk >= 30000) //every 30 seconds 
     {
@@ -398,7 +425,8 @@ unsigned long now = millis();
         millisBlynk = millis();
         //bme.performReading();
         sensors.requestTemperatures();
-
+        tempPool = sensors.getTempCByIndex(0);
+        
 
         
         
@@ -415,7 +443,7 @@ unsigned long now = millis();
         Blynk.virtualWrite(V4, abshumBME);
         Blynk.virtualWrite(V17, humidex);
         }
-        Blynk.virtualWrite(V5, tempPoolAvg.mean());
+        if (tempPool > 0) {Blynk.virtualWrite(V5, tempPool);}
         Blynk.virtualWrite(V6, tempBME);
         Blynk.virtualWrite(V7, gasBME);
         Blynk.virtualWrite(V8, pm1Avg.mean());
@@ -437,14 +465,12 @@ unsigned long now = millis();
         Blynk.virtualWrite(V29, bmerunInStatus);
         Blynk.virtualWrite(V30, bmegasPercentage);
         Blynk.virtualWrite(V31, WiFi.RSSI());
-        if (bridgedata > 0) {Blynk.virtualWrite(V53, bridgedata);}
+        if (bridgedata > 0) {Blynk.virtualWrite(V53, bridgedata);
+        bridge1.virtualWrite(V61, bridgedata);}
         
-        //terminal.print(WiFi.RSSI());
-        //terminal.println(output);
-        //terminal.print("Last update: ");
-        //terminal.print(Time.timeStr()); //print current time to Blynk terminal
-        //terminal.println("");
-        //terminal.flush();
+        old1p0 = new1p0;
+        old2p5 = new2p5;
+        old10 = new10;
         firstvalue = 0; //we have run once now, no longer first run
     }
 
@@ -530,7 +556,7 @@ bool loadState(Bsec2 bsec)
         for (uint8_t i = 0; i < BSEC_MAX_STATE_BLOB_SIZE; i++)
         {
             bsecState[i] = EEPROM.read(i + 1);
-            terminal.print(String(bsecState[i], HEX) + ", ");
+            terminal.print(String(bsecState[i], HEX) + "");
         }
         terminal.println();
         terminal.flush();
@@ -675,4 +701,8 @@ void newDataCallback(const bme68xData data, const bsecOutputs outputs, Bsec2 bse
     }
 
     updateBsecState(iaqSensor);
+}
+
+BLYNK_CONNECTED() {
+  bridge1.setAuthToken (remoteAuth);
 }
