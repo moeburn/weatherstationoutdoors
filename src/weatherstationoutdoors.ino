@@ -14,7 +14,8 @@
 #include <blynk.h>
 
 #include <bsec2.h>
-
+#include "NtpTime.h"
+NtpTime ntptime;
 
 
 #include "math.h"
@@ -281,7 +282,7 @@ BLYNK_WRITE(V19)
         while (!Particle.connected()) {
             terminal.print(".");
             terminal.flush();
-            delay(500);
+            delay(250);
             }
         terminal.println("connected.");
     }
@@ -306,6 +307,7 @@ void setup() { //This is where all Arduinos store the on-bootup code
   while (WiFi.connecting()){}
   Particle.disconnect();
     Serial.begin();
+    ntptime.start();
     Time.zone(-4);
     Wire.begin();
       if(EEPROM.hasPendingErase()) {
@@ -381,7 +383,8 @@ unsigned long millisPool = 0;
 
 
 void loop() { //Do all the time
-
+if(!WiFi.ready())
+{WiFi.connect();}
 
 
 unsigned long now = millis();
