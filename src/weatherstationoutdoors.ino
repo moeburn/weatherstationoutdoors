@@ -151,7 +151,7 @@ PMS7003Serial<USARTSerial> pms7003(Serial1, D6);  //start up the PMS laser parti
 WidgetTerminal terminal(V19); //terminal widget
 WidgetBridge bridge1(V60);
 
-STARTUP(WiFi.selectAntenna(ANT_INTERNAL));
+STARTUP(WiFi.selectAntenna(ANT_AUTO));
 SYSTEM_MODE(SEMI_AUTOMATIC);
 SYSTEM_THREAD(ENABLED);
 
@@ -329,7 +329,7 @@ void setup() { //This is where all Arduinos store the on-bootup code
     Blynk.begin(auth, IPAddress(192,168,50,197), 8080);
     
     terminal.println("********************************");
-    terminal.println("BEGIN OUTDOOR WEATHER STATION v2.2");
+    terminal.println("BEGIN OUTDOOR WEATHER STATION v2.3");
     terminal.println(output);
     terminal.print("Connected to: ");
     terminal.println(WiFi.SSID());
@@ -436,7 +436,7 @@ unsigned long now = millis();
         abshumBME = (6.112 * pow(2.71828, ((17.67 * tempBME)/(tempBME + 243.5))) * humBME * 2.1674)/(273.15 + tempBME); //calculate absolute humidity
         dewpoint = tempBME - ((100 - humBME)/5); //calculate dewpoint
         humidex = tempBME + 0.5555 * (6.11 * pow(2.71828, 5417.7530*( (1/273.16) - (1/(273.15 + dewpoint)) ) ) - 10); //calculate humidex using Environment Canada formula
-        sliderValue = new2p5;
+        sliderValue = bridgedata;
         if ((tempBME == 0) && (humBME == 0)) {}
         else {
         Blynk.virtualWrite(V0, tempBME);
@@ -445,6 +445,8 @@ unsigned long now = millis();
         Blynk.virtualWrite(V3, humBME);
         Blynk.virtualWrite(V4, abshumBME);
         Blynk.virtualWrite(V17, humidex);
+        bridge1.virtualWrite(V62, tempBME);
+        bridge1.virtualWrite(V63, abshumBME);
         }
         if (tempPool > 0) {Blynk.virtualWrite(V5, tempPool);}
         Blynk.virtualWrite(V6, tempBME);
@@ -470,6 +472,7 @@ unsigned long now = millis();
         Blynk.virtualWrite(V31, WiFi.RSSI());
         if (bridgedata > 0) {Blynk.virtualWrite(V53, bridgedata);
         bridge1.virtualWrite(V61, bridgedata);}
+        
         
         old1p0 = new1p0;
         old2p5 = new2p5;
