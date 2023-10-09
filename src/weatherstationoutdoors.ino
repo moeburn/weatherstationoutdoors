@@ -20,6 +20,8 @@ NtpTime ntptime;
 
 #include "math.h"
 #include "config/bme680_iaq_33v_3s_28d/bsec_iaq.h"
+
+
 #include <Average.h>
 
 Average<float> pm1Avg(30);
@@ -91,7 +93,8 @@ float abshumBME, tempBME, presBME, humBME, ds18temp, gasBME, tempPool;
 
 int debugcounter = 105;
 int firstvalue = 1;  //important, do not delete
-float bridgedata;
+float bridgedata, windbridgedata, windmps;
+double windchill;
 int history = 2;
 int historycount = history;
 float sensoravg;
@@ -184,6 +187,7 @@ BLYNK_WRITE(V19)
     terminal.println("bsec");
     terminal.println("connect");
     terminal.println("disconnect");
+    terminal.println("weather");
      terminal.println("==End of list.==");
     }
         if (String("wifi") == param.asStr()) 
@@ -290,7 +294,8 @@ BLYNK_WRITE(V19)
         Particle.disconnect();
         terminal.println("> Disconnecting from Particle cloud.");
     }
-    
+
+   
     terminal.flush();
 
 }
@@ -298,6 +303,12 @@ BLYNK_WRITE(V19)
 BLYNK_WRITE(V51){
     float pinData = param.asFloat();
     bridgedata = pinData;
+}
+
+BLYNK_WRITE(V56){
+    float pinData = param.asFloat();
+    windbridgedata = pinData;
+    windmps = windbridgedata / 3.6;
 }
 
 
@@ -375,6 +386,7 @@ void setup() { //This is where all Arduinos store the on-bootup code
     
     sensors.begin();
     RGB.control(true);
+
 }
 
 unsigned long last = 0;
@@ -429,7 +441,7 @@ unsigned long now = millis();
         //bme.performReading();
         sensors.requestTemperatures();
         tempPool = sensors.getTempCByIndex(0);
-        
+        windchill  = 13.12 + (0.6215*tempBME) - (11.37*pow(windbridgedata,0.16)) + (0.3965*tempBME*pow(windbridgedata,0.16));
 
         
         
@@ -470,6 +482,7 @@ unsigned long now = millis();
         Blynk.virtualWrite(V29, bmerunInStatus);
         Blynk.virtualWrite(V30, bmegasPercentage);
         Blynk.virtualWrite(V31, WiFi.RSSI());
+        Blynk.virtualWrite(V32, windchill);
         if (bridgedata > 0) {Blynk.virtualWrite(V53, bridgedata);
         bridge1.virtualWrite(V61, bridgedata);}
         
