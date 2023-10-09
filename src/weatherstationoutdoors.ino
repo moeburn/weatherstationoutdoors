@@ -93,7 +93,7 @@ float abshumBME, tempBME, presBME, humBME, ds18temp, gasBME, tempPool;
 
 int debugcounter = 105;
 int firstvalue = 1;  //important, do not delete
-float bridgedata, windbridgedata, windmps;
+float bridgedata, windbridgedata, windmps, winddir;
 double windchill;
 int history = 2;
 int historycount = history;
@@ -311,6 +311,71 @@ BLYNK_WRITE(V56){
     windmps = windbridgedata / 3.6;
 }
 
+BLYNK_WRITE(V58){
+    int pinData = param.asInt();
+winddir = pinData;
+}
+
+String windDirection(int temp_wind_deg)   //Source http://snowfence.umn.edu/Components/winddirectionanddegreeswithouttable3.htm
+{
+  switch(temp_wind_deg){
+    case 0 ... 11:
+      return "N";
+      break;
+    case 12 ... 33:
+      return "NNE";
+      break;
+    case 34 ... 56:
+      return "NE";
+      break;
+    case 57 ... 78:
+      return "ENE";
+      break;
+    case 79 ... 101:
+      return "E";
+      break;
+    case 102 ... 123:
+      return "ESE";
+      break;
+    case 124 ... 146:
+      return "SE";
+      break;
+    case 147 ... 168:
+      return "SSE";
+      break;
+    case 169 ... 191:
+      return "S";
+      break;
+    case 192 ... 213:
+      return "SSW";
+      break;
+    case 214 ... 236:
+      return "SW";
+      break;
+    case 237 ... 258:
+      return "WSW";
+      break;
+    case 259 ... 281:
+      return "W";
+      break;
+    case 282 ... 303:
+      return "WNW";
+      break;
+    case 304 ... 326:
+      return "NW";
+      break;
+    case 327 ... 348:
+      return "NNW";
+      break;
+    case 349 ... 360:
+      return "N";
+      break;
+    default:
+      return "error";
+      break;
+  }
+}
+
 
 void setup() { //This is where all Arduinos store the on-bootup code
    WiFi.on();
@@ -482,7 +547,11 @@ unsigned long now = millis();
         Blynk.virtualWrite(V29, bmerunInStatus);
         Blynk.virtualWrite(V30, bmegasPercentage);
         Blynk.virtualWrite(V31, WiFi.RSSI());
+           if ((windbridgedata != 0) && (winddir != 0)) 
+           {
         Blynk.virtualWrite(V32, windchill);
+        Blynk.virtualWrite(V33, windDirection(winddir));
+        }
         if (bridgedata > 0) {Blynk.virtualWrite(V53, bridgedata);
         bridge1.virtualWrite(V61, bridgedata);}
         
